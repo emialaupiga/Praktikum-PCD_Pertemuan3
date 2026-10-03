@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Resolusi, Histogram dan Transformasi Citra</title>
+    <style>
+        /* CSS Tema Luar Angkasa */
+        body {
+            background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+            color: #e0e6ed;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h3 {
+            color: #00f2fe;
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        /* Container Canvas Utama */
+        #gambar {
+            border: 2px solid #00f2fe !important;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
+            border-radius: 12px;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        /* Input File */
+        input[type="file"] {
+            margin: 15px 0;
+            color: #a8b2d1;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(79, 172, 254, 0.3);
+        }
+
+        #resolution {
+            margin-top: 5px;
+            font-weight: bold;
+            color: #00f2fe;
+            letter-spacing: 1px;
+        }
+
+        /* Container Tombol Menyamping (Grid 2 Kolom) */
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+            max-width: 420px;
+            width: 100%;
+        }
+
+        /* Styling Tombol Kontrol / Fitur */
+        button {
+            background: #232a3b;
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 12px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        /* Efek Glow & Hover seperti di gambar */
+        button:hover, button:focus {
+            background: #00f2fe;
+            color: #000000;
+            border-color: #00f2fe;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.8);
+            transform: translateY(-1px);
+        }
+
+        /* Layout Channel Hasil Transformasi & Histogram */
+        .channel-container {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .channel-block {
+            text-align: center;
+            background: rgba(16, 26, 43, 0.7);
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(79, 172, 254, 0.2);
+            backdrop-filter: blur(5px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .channel-block canvas {
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        .channel-block p {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #a8b2d1;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <h3>Resolusi, Histogram dan Transformasi Citra</h3>
+    <canvas id="gambar" width="300" height="300" style="border:1px solid #000"></canvas><br>
+    <input type="file" id="file1" accept=".jpg, .jpeg, .png, .bmp"><br>
+    <div id="resolution"></div>
+
+    <!-- Container tombol dibuat menyamping (Grid 2 Baris x 2 Kolom) -->
+    <div class="button-group">
+        <button onclick="showHistogram('gambar')">Show Histogram</button>
+        <button onclick="transformGrayscale('gambar')">Transform to Grayscale</button>
+        <button onclick="transformBinary('gambar')">Transform to Binary</button>
+        <button onclick="transformNegative('gambar')">Transform to Negative</button>
+    </div>
+    
+    <div id="channels" class="channel-container"></div>
+
+    <script>
+        let originalImage = null;
+
+        function loadImage(fileInput, canvasId) {
+            const file = fileInput.files[0];
+            if (!file) return;
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext("2d");
+            const img = new Image();
+            img.onload = function () {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                originalImage = img;
+                document.getElementById("resolution").textContent = `Resolution: ${img.width} x ${img.height}`;
+            };
+            img.src = URL.createObjectURL(file);
+        }
+
+        function clearChannels() {
+            document.getElementById("channels").innerHTML = "";
+        }
+
+        function createChannelCanvas(label, width, height, imgData) {
+            const container = document.getElementById("channels");
+            const block = document.createElement("div");
+            block.className = "channel-block";
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.putImageData(imgData, 0, 0);
+            const caption = document.createElement("p");
+            caption.textContent = label;
+            block.appendChild(canvas);
+            block.appendChild(caption);
+            container.appendChild(block);
+        }
+
+        function showHistogram(canvasId) {
+            clearChannels();
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext("2d");
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const R = new Array(256).fill(0);
+            const G = new Array(256).fill(0);
+            const B = new Array(256).fill(0);
+
+            for (let i = 0; i < imgData.data.length; i += 4) {
+                R[imgData.data[i]]++;
+                G[imgData.data[i + 1]]++;
+                B[imgData.data[i + 2]]++;
+            }
+
+            const maxR = Math.max(...R);
+            const maxG = Math.max(...G);
+            const maxB = Math.max(...B);
+
+            const drawHistogram = (hist, color, max) => {
+                const histCanvas = document.createElement("canvas");
+                histCanvas.width = 256;
+                histCanvas.height = 100;
+                const histCtx = histCanvas.getContext("2d");
+                histCtx.fillStyle = color;
+                hist.forEach((value, index) => {
+                    let h = (value / max) * histCanvas.height;
+                    histCtx.fillRect(index, histCanvas.height - h, 1, h);
+                });
+                return histCanvas;
+            };
+
+            createChannelCanvas("Red Channel", 256, 100, drawHistogram(R, "red", maxR).getContext("2d").getImageData(0, 0, 256, 100));
+            createChannelCanvas("Green Channel", 256, 100, drawHistogram(G, "green", maxG).getContext("2d").getImageData(0, 0, 256, 100));
+            createChannelCanvas("Blue Channel", 256, 100, drawHistogram(B, "blue", maxB).getContext("2d").getImageData(0, 0, 256, 100));
+
+            const histCanvas = document.createElement("canvas");
+            histCanvas.width = 256;
+            histCanvas.height = 100;
+            const histCtx = histCanvas.getContext("2d");
+
+            histCtx.strokeStyle = "red";
+            histCtx.beginPath();
+            for (let i = 0; i < 256; i++) {
+                let y = histCanvas.height - (R[i] / maxR) * histCanvas.height;
+                if (i === 0) histCtx.moveTo(i, y); else histCtx.lineTo(i, y);
+            }
+            histCtx.stroke();
+
+            histCtx.strokeStyle = "green";
+            histCtx.beginPath();
+            for (let i = 0; i < 256; i++) {
+                let y = histCanvas.height - (G[i] / maxG) * histCanvas.height;
+                if (i === 0) histCtx.moveTo(i, y); else histCtx.lineTo(i, y);
+            }
+            histCtx.stroke();
+
+            histCtx.strokeStyle = "blue";
+            histCtx.beginPath();
+            for (let i = 0; i < 256; i++) {
+                let y = histCanvas.height - (B[i] / maxB) * histCanvas.height;
+                if (i === 0) histCtx.moveTo(i, y); else histCtx.lineTo(i, y);
+            }
+            histCtx.stroke();
+
+            const container = document.getElementById("channels");
+            const block = document.createElement("div");
+            block.className = "channel-block";
+            const caption = document.createElement("p");
+            caption.textContent = "RGB Combined Histogram";
+            block.appendChild(histCanvas);
+            block.appendChild(caption);
+            container.appendChild(block);
+        }
+
+        function transformGrayscale(canvasId) {
+            clearChannels();
+            const originalCanvas = document.getElementById(canvasId);
+            const ctx = originalCanvas.getContext("2d");
+            const imgData = ctx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const newImgData = new ImageData(originalCanvas.width, originalCanvas.height);
+
+            for (let i = 0; i < imgData.data.length; i += 4) {
+                let gray = Math.round(0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2]);
+                newImgData.data[i] = newImgData.data[i + 1] = newImgData.data[i + 2] = gray;
+                newImgData.data[i + 3] = imgData.data[i + 3];
+            }
+
+            createChannelCanvas("Grayscale", originalCanvas.width, originalCanvas.height, newImgData);
+        }
+
+        function transformBinary(canvasId, threshold = 125) {
+            clearChannels();
+            const originalCanvas = document.getElementById(canvasId);
+            const ctx = originalCanvas.getContext("2d");
+            const imgData = ctx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const newImgData = new ImageData(originalCanvas.width, originalCanvas.height);
+
+            for (let i = 0; i < imgData.data.length; i += 4) {
+                let gray = Math.round(0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2]);
+                let value = gray > threshold ? 255 : 0;
+                newImgData.data[i] = newImgData.data[i + 1] = newImgData.data[i + 2] = value;
+                newImgData.data[i + 3] = imgData.data[i + 3];
+            }
+
+            createChannelCanvas(`Binary (Threshold ${threshold})`, originalCanvas.width, originalCanvas.height, newImgData);
+        }
+
+        function transformNegative(canvasId) {
+            clearChannels();
+            const originalCanvas = document.getElementById(canvasId);
+            const ctx = originalCanvas.getContext("2d");
+            const imgData = ctx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const newImgData = new ImageData(originalCanvas.width, originalCanvas.height);
+
+            for (let i = 0; i < imgData.data.length; i += 4) {
+                newImgData.data[i]     = 255 - imgData.data[i];
+                newImgData.data[i + 1] = 255 - imgData.data[i + 1];
+                newImgData.data[i + 2] = 255 - imgData.data[i + 2];
+                newImgData.data[i + 3] = imgData.data[i + 3];
+            }
+
+            createChannelCanvas("Negative Image", originalCanvas.width, originalCanvas.height, newImgData);
+        }
+
+        document.getElementById("file1").addEventListener("change", function () {
+            loadImage(this, "gambar");
+            clearChannels();
+        });
+    </script>
+</body>
+</html>
